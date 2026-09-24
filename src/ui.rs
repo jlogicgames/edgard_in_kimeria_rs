@@ -63,6 +63,10 @@ enum MenuAction {
     ExitToMenu,
     PlayAgain,
     SetLanguage(Language),
+    /// Never constructed on wasm32 — the Options menu doesn't spawn the
+    /// windowed/fullscreen buttons there, see `spawn_options_menu_buttons`.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    SetWindowed(bool),
 }
 
 #[derive(Component)]
@@ -576,10 +580,27 @@ fn spawn_about_menu(
     ));
 }
 
+/// How many appear-animation slots the windowed/fullscreen section
+/// (`spawn_options_window_section`) takes up: one heading plus two buttons.
+/// Zero on web, which never spawns that section — see its doc comment.
+#[cfg(not(target_arch = "wasm32"))]
+const OPTIONS_WINDOW_SECTION_APPEAR_COUNT: u32 = 3;
+#[cfg(target_arch = "wasm32")]
+const OPTIONS_WINDOW_SECTION_APPEAR_COUNT: u32 = 0;
+
+/// How many [`MenuButtonIndex`] slots that same section takes up (its two
+/// buttons; the heading doesn't count).
+#[cfg(not(target_arch = "wasm32"))]
+const OPTIONS_WINDOW_SECTION_BUTTON_COUNT: u32 = 2;
+#[cfg(target_arch = "wasm32")]
+const OPTIONS_WINDOW_SECTION_BUTTON_COUNT: u32 = 0;
+
 /// The main menu's language page: one button per [`Language`], each of which
 /// sets [`GameSettings::language`] and returns to the main menu — which then
 /// re-spawns (via `OnEnter(AppState::MainMenu)`) with every label in the
-/// newly chosen language.
+/// newly chosen language. Native builds also get a windowed/fullscreen
+/// section here (jlogicgames/edgard_in_kimeria_rs#22); web is excluded, see
+/// `spawn_options_window_section`.
 fn spawn_options_menu(
     mut commands: Commands,
     assets: Res<GameAssets>,
@@ -588,6 +609,7 @@ fn spawn_options_menu(
 ) {
     let now = time.elapsed_secs();
     let lang = settings.language;
+    let windowed = settings.windowed;
     let english_label = if lang == Language::English {
         format!("> {}", Language::English.native_name())
     } else {
@@ -603,47 +625,121 @@ fn spawn_options_menu(
         DespawnOnExit(AppState::Options),
         children![(
             panel(false),
-            children![
-                heading(
+            // Not the `children!` macro: the windowed/fullscreen section's
+            // length depends on the target (native gets it, web doesn't —
+            // see `spawn_options_window_section`), so it needs ordinary
+            // control flow rather than a fixed list of expressions, same as
+            // `spawn_main_menu`'s button row.
+            Children::spawn((
+                Spawn(heading(
                     Msg::Options.t(lang),
                     24.0,
                     assets.font_text.clone(),
                     AppearAnim::new(0, now)
-                ),
-                heading(
+                )),
+                Spawn(heading(
                     Msg::LanguageLabel.t(lang),
                     16.0,
                     assets.font_text.clone(),
                     AppearAnim::new(1, now)
-                ),
-                button(
+                )),
+                Spawn(button(
                     MenuAction::SetLanguage(Language::English),
                     &english_label,
                     24.0,
                     0,
                     assets.font_button.clone(),
                     AppearAnim::new(2, now),
-                ),
-                button(
+                )),
+                Spawn(button(
                     MenuAction::SetLanguage(Language::Ukrainian),
                     &ukrainian_label,
                     24.0,
                     1,
                     assets.font_button.clone(),
                     AppearAnim::new(3, now),
-                ),
-                button(
+                )),
+                {
+                    let font_text = assets.font_text.clone();
+                    let font_button = assets.font_button.clone();
+                    SpawnWith(move |parent: &mut ChildSpawner| {
+                        spawn_options_window_section(parent, font_text, font_button, windowed, lang, now);
+                    })
+                },
+                Spawn(button(
                     MenuAction::Back,
                     Msg::Back.t(lang),
                     28.0,
-                    2,
+                    2 + OPTIONS_WINDOW_SECTION_BUTTON_COUNT,
                     assets.font_button.clone(),
-                    AppearAnim::new(4, now),
-                ),
-                menu_hint(assets.font_text.clone(), AppearAnim::new(5, now), lang),
-            ],
+                    AppearAnim::new(4 + OPTIONS_WINDOW_SECTION_APPEAR_COUNT, now),
+                )),
+                Spawn(menu_hint(
+                    assets.font_text.clone(),
+                    AppearAnim::new(5 + OPTIONS_WINDOW_SECTION_APPEAR_COUNT, now),
+                    lang,
+                )),
+            )),
         )],
     ));
+}
+
+/// Native only: the browser owns fullscreen on web (Fullscreen API, user
+/// gesture required), so this section — and the `MenuAction::SetWindowed` it
+/// spawns buttons for — doesn't exist there. See `initial_window_mode` in
+/// `main.rs` for where the default itself is set.
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_options_window_section(
+    parent: &mut ChildSpawner,
+    font_text: Handle<Font>,
+    font_button: Handle<Font>,
+    windowed: bool,
+    lang: Language,
+    now: f32,
+) {
+    let fullscreen_label = if windowed {
+        Msg::Fullscreen.t(lang).to_string()
+    } else {
+        format!("> {}", Msg::Fullscreen.t(lang))
+    };
+    let windowed_label = if windowed {
+        format!("> {}", Msg::Windowed.t(lang))
+    } else {
+        Msg::Windowed.t(lang).to_string()
+    };
+    parent.spawn(heading(
+        Msg::WindowModeLabel.t(lang),
+        16.0,
+        font_text,
+        AppearAnim::new(4, now),
+    ));
+    parent.spawn(button(
+        MenuAction::SetWindowed(false),
+        &fullscreen_label,
+        24.0,
+        2,
+        font_button.clone(),
+        AppearAnim::new(5, now),
+    ));
+    parent.spawn(button(
+        MenuAction::SetWindowed(true),
+        &windowed_label,
+        24.0,
+        3,
+        font_button,
+        AppearAnim::new(6, now),
+    ));
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_options_window_section(
+    _parent: &mut ChildSpawner,
+    _font_text: Handle<Font>,
+    _font_button: Handle<Font>,
+    _windowed: bool,
+    _lang: Language,
+    _now: f32,
+) {
 }
 
 fn spawn_pause_menu(
@@ -980,6 +1076,10 @@ fn handle_buttons(
     mut sounds: MessageWriter<PlaySound>,
     mut progress: ResMut<GameProgress>,
     mut settings: ResMut<GameSettings>,
+    #[cfg(not(target_arch = "wasm32"))] mut primary_window: Query<
+        &mut Window,
+        With<bevy::window::PrimaryWindow>,
+    >,
 ) {
     for (interaction, action) in &interactions {
         if *interaction != Interaction::Pressed {
@@ -997,6 +1097,22 @@ fn handle_buttons(
             MenuAction::SetLanguage(lang) => {
                 settings.language = *lang;
                 next_state.set(AppState::MainMenu);
+            }
+            MenuAction::SetWindowed(windowed) => {
+                settings.windowed = *windowed;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    crate::window_prefs::save_windowed(*windowed);
+                    if let Ok(mut window) = primary_window.single_mut() {
+                        window.mode = if *windowed {
+                            bevy::window::WindowMode::Windowed
+                        } else {
+                            bevy::window::WindowMode::BorderlessFullscreen(
+                                bevy::window::MonitorSelection::Current,
+                            )
+                        };
+                    }
+                }
             }
             MenuAction::Exit => {
                 exit.write(AppExit::Success);
