@@ -47,6 +47,10 @@ const BREATHE_SPEED: f32 = 2.0;
 /// Which menu button an entity is, so one handler can serve every menu.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuAction {
+    /// Only spawned on the web start screen (`AppState::StartScreen`);
+    /// native starts directly in `AppState::Loading` and never spawns the
+    /// button that constructs this.
+    Start,
     Play,
     About,
     Options,
@@ -131,55 +135,56 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(AppState::MainMenu),
-            (reset_camera_for_menu, despawn_hud_for_menu, spawn_main_menu).chain(),
-        )
-        .add_systems(
-            OnEnter(AppState::About),
-            (
-                reset_camera_for_menu,
-                despawn_hud_for_menu,
-                spawn_about_menu,
+        app.add_systems(OnEnter(AppState::StartScreen), spawn_start_screen)
+            .add_systems(
+                OnEnter(AppState::MainMenu),
+                (reset_camera_for_menu, despawn_hud_for_menu, spawn_main_menu).chain(),
             )
-                .chain(),
-        )
-        .add_systems(
-            OnEnter(AppState::Options),
-            (
-                reset_camera_for_menu,
-                despawn_hud_for_menu,
-                spawn_options_menu,
+            .add_systems(
+                OnEnter(AppState::About),
+                (
+                    reset_camera_for_menu,
+                    despawn_hud_for_menu,
+                    spawn_about_menu,
+                )
+                    .chain(),
             )
-                .chain(),
-        )
-        .add_systems(OnEnter(AppState::Paused), spawn_pause_menu)
-        .add_systems(OnEnter(AppState::GameOver), spawn_game_over)
-        .add_systems(OnEnter(AppState::Playing), spawn_hud)
-        .add_systems(
-            Update,
-            (
-                focus_on_hover,
-                handle_menu_navigation,
-                ensure_default_focus,
-                activate_focused_button,
-                handle_buttons,
+            .add_systems(
+                OnEnter(AppState::Options),
+                (
+                    reset_camera_for_menu,
+                    despawn_hud_for_menu,
+                    spawn_options_menu,
+                )
+                    .chain(),
             )
-                .chain(),
-        )
-        .add_systems(
-            Update,
-            (
-                update_coin_counter,
-                resume_on_escape,
-                sync_menu_fog,
-                sync_menu_fireflies,
-                animate_buttons,
-                play_hover_sound,
-                advance_appear,
-                animate_breathing_title,
-            ),
-        );
+            .add_systems(OnEnter(AppState::Paused), spawn_pause_menu)
+            .add_systems(OnEnter(AppState::GameOver), spawn_game_over)
+            .add_systems(OnEnter(AppState::Playing), spawn_hud)
+            .add_systems(
+                Update,
+                (
+                    focus_on_hover,
+                    handle_menu_navigation,
+                    ensure_default_focus,
+                    activate_focused_button,
+                    handle_buttons,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                Update,
+                (
+                    update_coin_counter,
+                    resume_on_escape,
+                    sync_menu_fog,
+                    sync_menu_fireflies,
+                    animate_buttons,
+                    play_hover_sound,
+                    advance_appear,
+                    animate_breathing_title,
+                ),
+            );
     }
 }
 
@@ -382,6 +387,43 @@ fn sync_menu_fireflies(
             commands.entity(entity).try_despawn();
         }
     }
+}
+
+/// The temporary camera the web start screen renders to. `spawn_camera` (the
+/// real, `MainCamera`-tagged one, in `camera.rs`) needs `GameAssets` for its
+/// backdrop sprite and doesn't spawn until `OnExit(AppState::Loading)`, which
+/// is still ahead of this screen — so it gets its own bare camera here,
+/// `DespawnOnExit`-cleaned the moment the click sends the state past it.
+#[derive(Component)]
+struct StartScreenCamera;
+
+/// Web only in practice: `AppState::StartScreen` is the default state on
+/// `wasm32` and otherwise unreachable (see `AppState`). One button stands
+/// between app boot and `AppState::Loading`; clicking it is the user gesture
+/// browsers require before audio can play, satisfied before `AudioPlugin`
+/// or asset loading ever starts.
+fn spawn_start_screen(mut commands: Commands, settings: Res<GameSettings>, time: Res<Time<Real>>) {
+    let now = time.elapsed_secs();
+    let lang = settings.language;
+    commands.spawn((
+        Camera2d,
+        StartScreenCamera,
+        DespawnOnExit(AppState::StartScreen),
+        Name::new("StartScreenCamera"),
+    ));
+    commands.spawn((
+        overlay_root("StartScreen"),
+        DespawnOnExit(AppState::StartScreen),
+        BackgroundColor(Color::BLACK),
+        children![button(
+            MenuAction::Start,
+            Msg::Start.t(lang),
+            40.0,
+            0,
+            Handle::<Font>::default(),
+            AppearAnim::new(0, now),
+        )],
+    ));
 }
 
 fn spawn_main_menu(
@@ -945,6 +987,7 @@ fn handle_buttons(
         }
         sounds.write(PlaySound::new("button_click.wav"));
         match action {
+            MenuAction::Start => next_state.set(AppState::Loading),
             MenuAction::Play => {
                 loads.write(LoadLevel(0));
                 next_state.set(AppState::Playing);

@@ -45,8 +45,16 @@ pub const LOGICAL_RESOLUTION: Vec2 = Vec2::new(640.0, 360.0);
 /// its UI automatically.
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AppState {
+    /// Web only: a single-button screen standing between app boot and asset
+    /// loading. Browsers block audio until a user gesture, and `AudioPlugin`
+    /// otherwise has no guarantee one happened before it tries to play
+    /// anything, so this state is the default on `wasm32` — the click that
+    /// leaves it is that gesture. Native has no such restriction and starts
+    /// straight in `Loading`; the enum's single `#[default]` swaps by target.
+    #[cfg_attr(target_arch = "wasm32", default)]
+    StartScreen,
     /// Waits for every sprite sheet and sound before anything can spawn.
-    #[default]
+    #[cfg_attr(not(target_arch = "wasm32"), default)]
     Loading,
     MainMenu,
     About,

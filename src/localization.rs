@@ -32,6 +32,7 @@ impl Language {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Msg {
     Title,
+    Start,
     Play,
     About,
     Options,
@@ -56,6 +57,9 @@ impl Msg {
         match (self, lang) {
             (Title, English) => "Edgard in Kimeria",
             (Title, Ukrainian) => "Едгард у Кімерії",
+
+            (Start, English) => "Start",
+            (Start, Ukrainian) => "Почати",
 
             (Play, English) => "Play",
             (Play, Ukrainian) => "Грати",
