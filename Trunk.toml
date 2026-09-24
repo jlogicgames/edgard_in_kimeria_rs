@@ -1,7 +1,7 @@
 [build]
 target = "index.html"
 dist = "dist"
-public_url = "/edgard_in_kimeria/"
+public_url = "/edgard_in_kimeria_rs/"
 # Chrome ignores integrity on preload/modulepreload destinations it doesn't
 # support SRI for and logs a warning every load; there's nothing to verify
 # against since we control the build, so skip generating the hashes.
