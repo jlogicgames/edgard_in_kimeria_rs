@@ -44,6 +44,9 @@ pub enum Msg {
     PauseMenu,
     GameOver,
     LanguageLabel,
+    WindowModeLabel,
+    Fullscreen,
+    Windowed,
     ControlsHelp,
     MenuHint,
     AboutBody,
@@ -93,6 +96,15 @@ impl Msg {
 
             (LanguageLabel, English) => "Language",
             (LanguageLabel, Ukrainian) => "Мова",
+
+            (WindowModeLabel, English) => "Display",
+            (WindowModeLabel, Ukrainian) => "Екран",
+
+            (Fullscreen, English) => "Fullscreen",
+            (Fullscreen, Ukrainian) => "Повний екран",
+
+            (Windowed, English) => "Windowed",
+            (Windowed, Ukrainian) => "Віконний режим",
 
             (ControlsHelp, English) => {
                 "Use WASD or Arrow Keys for movement.\n\

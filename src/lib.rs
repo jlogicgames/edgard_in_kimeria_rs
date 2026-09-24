@@ -35,6 +35,8 @@ pub mod localization;
 pub mod objects;
 pub mod player;
 pub mod ui;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod window_prefs;
 
 /// Logical resolution the game is authored against; the window letterboxes to it.
 pub const LOGICAL_RESOLUTION: Vec2 = Vec2::new(640.0, 360.0);
@@ -78,6 +80,10 @@ pub struct GameSettings {
     pub invulnerable: bool,
     /// UI display language, changed from the main menu's Options page.
     pub language: crate::localization::Language,
+    /// Native only: whether the player opted out of the fullscreen default
+    /// (jlogicgames/edgard_in_kimeria_rs#22). Unused on web, which always
+    /// runs windowed regardless of this field.
+    pub windowed: bool,
 }
 
 impl Default for GameSettings {
@@ -89,6 +95,7 @@ impl Default for GameSettings {
             chroma_glitch: false,
             invulnerable: false,
             language: crate::localization::Language::default(),
+            windowed: false,
         }
     }
 }
@@ -108,8 +115,14 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+        let mut settings = GameSettings::default();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            settings.windowed = crate::window_prefs::load_windowed();
+        }
         app.init_state::<AppState>()
-            .init_resource::<GameSettings>()
+            .insert_resource(settings)
             .init_resource::<GameProgress>()
             .add_plugins((
                 assets::AssetsPlugin,
